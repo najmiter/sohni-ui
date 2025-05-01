@@ -1,0 +1,36 @@
+{
+  "name": "sohni-ui",
+  "version": "1.0.01",
+  "description": "A React Native component library styled with NativeWind.",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "prepare": "npm run build",
+    "test": "jest",
+    "lint": "eslint .",
+    "clean": "rm -rf dist",
+    "release": "npm patch && npm publish"
+  },
+  "keywords": [
+    "react-native",
+    "nativewind",
+    "component-library"
+  ],
+  "author": "Najam",
+  "license": "MIT",
+  "peerDependencies": {
+    "react": ">=17.0.0",
+    "react-native": ">=0.64.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.1.2",
+    "@types/react-native": "^0.72.8",
+    "eslint": "^8.0.0",
+    "jest": "^29.0.0",
+    "nativewind": "^4.1.23",
+    "react-native": "^0.79.1",
+    "tailwindcss": "^3.4.17",
+    "typescript": "^5.0.0"
+  }
+}

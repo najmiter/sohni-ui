@@ -1,6 +1,6 @@
 module.exports = function (api) {
   api.cache(true);
   return {
-    presets: ['nativewind/babel'],
+    presets: ['module:metro-react-native-babel-preset'],
   };
 };

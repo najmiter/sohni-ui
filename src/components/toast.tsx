@@ -9,18 +9,23 @@ import React, {
 } from 'react';
 import {
   ActivityIndicator,
-  Animated,
   Dimensions,
   Platform,
   StyleProp,
   StyleSheet,
   Text,
-  TextStyle,
   TouchableOpacity,
   useColorScheme,
   View,
   ViewStyle,
 } from 'react-native';
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+  withTiming,
+  cancelAnimation,
+} from 'react-native-reanimated';
 import {
   ToastComponentProps,
   ToastContextType,
@@ -223,22 +228,18 @@ const Toast: React.FC<ToastComponentProps> = ({
   const [isVisible, setIsVisible] = useState(message.length > 0 || !!promise);
   const [internalMessage, setInternalMessage] = useState(message);
   const [internalType, setInternalType] = useState<ToastType>(type);
-  const [progressWidth, setProgressWidth] = useState(0);
 
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  const progressAnim = useRef(new Animated.Value(0)).current;
-
-  const translateYAnim = useRef(
-    new Animated.Value(position === 'top' ? -50 : 50)
-  ).current;
-  const scaleAnim = useRef(new Animated.Value(0.8)).current;
+  const opacity = useSharedValue(0);
+  const translateY = useSharedValue(position === 'top' ? -50 : 50);
+  const scale = useSharedValue(0.8);
+  const progressValue = useSharedValue(0);
 
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isMounted = useRef(true);
 
   useEffect(() => {
     if (message.length > 0) {
-      showToastCallback();
+      showToast();
     }
   }, []);
 
@@ -248,8 +249,10 @@ const Toast: React.FC<ToastComponentProps> = ({
       if (timeoutRef.current) {
         clearTimeout(timeoutRef.current);
       }
-      fadeAnim.stopAnimation();
-      progressAnim.stopAnimation();
+      cancelAnimation(opacity);
+      cancelAnimation(translateY);
+      cancelAnimation(scale);
+      cancelAnimation(progressValue);
     };
   }, []);
 
@@ -257,7 +260,7 @@ const Toast: React.FC<ToastComponentProps> = ({
     if (message && message !== internalMessage) {
       setInternalMessage(message);
       setInternalType(type);
-      showToastCallback();
+      showToast();
     }
   }, [message, type]);
 
@@ -266,14 +269,14 @@ const Toast: React.FC<ToastComponentProps> = ({
     setInternalType('loading');
     setInternalMessage(pendingMessage);
 
-    showToastCallback(0);
+    showToast(0);
     if (!promise) return;
     promise
       .then((result) => {
         if (isMounted.current) {
           setInternalType('success');
           setInternalMessage(successMessage);
-          showToastCallback(duration);
+          showToast(duration);
         }
         return result;
       })
@@ -283,112 +286,80 @@ const Toast: React.FC<ToastComponentProps> = ({
           setInternalMessage(
             typeof error?.message === 'string' ? error.message : errorMessage
           );
-          showToastCallback(duration);
+          showToast(duration);
         }
         return Promise.reject(error);
       });
   }, [promise]);
 
-  useEffect(() => {
-    const progressListener = progressAnim.addListener(({ value }) => {
-      setProgressWidth(value);
-    });
-    return () => {
-      progressAnim.removeListener(progressListener);
-    };
-  }, []);
-
-  const showToastCallback = useCallback(
+  const showToast = useCallback(
     (autoHideDuration = duration) => {
       if (timeoutRef.current) {
         clearTimeout(timeoutRef.current);
       }
       setIsVisible(true);
-      if (position === 'top') {
-        translateYAnim.setValue(-50);
-      } else if (position === 'bottom') {
-        translateYAnim.setValue(50);
-      } else {
-        scaleAnim.setValue(0.8);
-      }
-      Animated.parallel([
-        Animated.timing(fadeAnim, {
-          toValue: 1,
-          duration: 300,
-          useNativeDriver: true,
-        }),
 
-        position === 'center'
-          ? Animated.spring(scaleAnim, {
-              toValue: 1,
-              friction: 8,
-              tension: 40,
-              useNativeDriver: true,
-            })
-          : Animated.spring(translateYAnim, {
-              toValue: 0,
-              friction: 8,
-              tension: 40,
-              useNativeDriver: true,
-            }),
-      ]).start();
-      if (progress && autoHideDuration > 0) {
-        progressAnim.setValue(0);
-        Animated.timing(progressAnim, {
-          toValue: 100,
-          duration: autoHideDuration,
-          useNativeDriver: false,
-        }).start();
+      if (position === 'top') {
+        translateY.value = -50;
+      } else if (position === 'bottom') {
+        translateY.value = 50;
+      } else {
+        scale.value = 0.8;
       }
+
+      opacity.value = withTiming(1, { duration: 300 });
+
+      if (position === 'center') {
+        scale.value = withSpring(1, {
+          damping: 15,
+          stiffness: 120,
+        });
+      } else {
+        translateY.value = withSpring(0, {
+          damping: 15,
+          stiffness: 120,
+        });
+      }
+
+      if (progress && autoHideDuration > 0) {
+        progressValue.value = 0;
+        progressValue.value = withTiming(100, { duration: autoHideDuration });
+      }
+
       if (autoHideDuration > 0) {
         timeoutRef.current = setTimeout(() => {
-          hideToastCallback();
+          hideToast();
         }, autoHideDuration);
       }
     },
-    [
-      duration,
-      position,
-      fadeAnim,
-      translateYAnim,
-      scaleAnim,
-      progressAnim,
-      progress,
-    ]
+    [duration, position]
   );
 
-  const hideToastCallback = useCallback(() => {
+  const hideToast = useCallback(() => {
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current);
       timeoutRef.current = null;
     }
-    Animated.parallel([
-      Animated.timing(fadeAnim, {
-        toValue: 0,
-        duration: 250,
-        useNativeDriver: true,
-      }),
 
-      position === 'center'
-        ? Animated.timing(scaleAnim, {
-            toValue: 0.8,
-            duration: 250,
-            useNativeDriver: true,
-          })
-        : Animated.timing(translateYAnim, {
-            toValue: position === 'top' ? -50 : 50,
-            duration: 250,
-            useNativeDriver: true,
-          }),
-    ]).start(() => {
+    opacity.value = withTiming(0, { duration: 250 });
+
+    if (position === 'center') {
+      scale.value = withTiming(0.8, { duration: 250 });
+    } else {
+      translateY.value = withTiming(position === 'top' ? -50 : 50, {
+        duration: 250,
+      });
+    }
+
+    setTimeout(() => {
       if (isMounted.current) {
         setIsVisible(false);
         if (onClose) {
           onClose();
         }
       }
-    });
-  }, [fadeAnim, translateYAnim, scaleAnim, position, onClose]);
+    }, 300);
+  }, [position, onClose]);
 
   const getPositionStyle = useMemo((): StyleProp<ViewStyle> => {
     const TOAST_SPACING = 5;
@@ -494,19 +465,25 @@ const Toast: React.FC<ToastComponentProps> = ({
     }
   }, [internalType, getColors, icon]);
 
-  const animationStyle = useMemo(() => {
+  const animatedStyle = useAnimatedStyle(() => {
     if (position === 'center') {
       return {
-        opacity: fadeAnim,
-        transform: [{ scale: scaleAnim }],
+        opacity: opacity.value,
+        transform: [{ scale: scale.value }],
       };
     } else {
       return {
-        opacity: fadeAnim,
-        transform: [{ translateY: translateYAnim }],
+        opacity: opacity.value,
+        transform: [{ translateY: translateY.value }],
       };
     }
-  }, [position, fadeAnim, scaleAnim, translateYAnim]);
+  });
+
+  const progressAnimStyle = useAnimatedStyle(() => {
+    return {
+      width: `${progressValue.value}%`,
+    };
+  });
 
   const colors = getColors;
 
@@ -519,31 +496,28 @@ const Toast: React.FC<ToastComponentProps> = ({
       style={[
         styles.container,
         getPositionStyle,
-        animationStyle,
+        animatedStyle,
         {
           backgroundColor: colors.bg,
-        },
-        containerStyle,
-        {
           borderRadius: radius,
         },
+        containerStyle,
       ]}
     >
-      {/* Progress bar */}
       {progress && (
         <View style={styles.progressContainer}>
           <Animated.View
             style={[
               styles.progressBar,
-              { width: `${progressWidth}%`, backgroundColor: colors.icon },
+              { backgroundColor: colors.icon },
+              progressAnimStyle,
             ]}
           />
         </View>
       )}
       <View style={styles.contentContainer}>
-        {/* Icon */}
         <View style={styles.iconContainer}>{renderIcon()}</View>
-        {/* Text content */}
+
         <View style={styles.textContainer}>
           <Text style={[styles.message, { color: colors.text }, textStyle]}>
             {internalMessage}
@@ -560,11 +534,11 @@ const Toast: React.FC<ToastComponentProps> = ({
             </Text>
           )}
         </View>
-        {/* Close button */}
+
         {closable && (
           <TouchableOpacity
             style={styles.closeButton}
-            onPress={hideToastCallback}
+            onPress={() => hideToast()}
           >
             <Text style={{ color: colors.text, fontSize: 16 }}>×</Text>
           </TouchableOpacity>
@@ -590,7 +564,7 @@ const styles = StyleSheet.create({
         shadowRadius: 8,
       },
       android: {
-        shadowRadius: 8,
+        elevation: 4,
       },
     }),
   },

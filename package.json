@@ -1,6 +1,6 @@
 {
   "name": "sohni-ui",
-  "version": "1.0.621",
+  "version": "1.0.622",
   "description": "A React Native component library.",
   "main": "index.js",
   "types": "index.d.ts",
@@ -25,7 +25,8 @@
   "license": "MIT",
   "peerDependencies": {
     "react": ">=17.0.0",
-    "react-native": ">=0.64.0"
+    "react-native": ">=0.64.0",
+    "react-native-reanimated": ">=2.0.0"
   },
   "devDependencies": {
     "@types/react": "^19.1.2",
@@ -33,6 +34,8 @@
     "eslint": "^8.0.0",
     "jest": "^29.0.0",
     "react-native": "^0.79.1",
+    "react-native-gesture-handler": "^2.25.0",
+    "react-native-reanimated": "^3.17.5",
     "typescript": "^5.0.0"
   }
 }

@@ -1,6 +1,6 @@
 {
   "name": "sohni-ui",
-  "version": "1.0.62",
+  "version": "1.0.621",
   "description": "A React Native component library.",
   "main": "index.js",
   "types": "index.d.ts",
@@ -16,6 +16,11 @@
     "react-native",
     "component-library"
   ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/najmiter/sohni-ui.git"
+  },
+  "homepage": "https://github.com/najmiter/sohni-ui#readme",
   "author": "Najam",
   "license": "MIT",
   "peerDependencies": {

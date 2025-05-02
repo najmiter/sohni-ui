@@ -1,6 +1,6 @@
 {
   "name": "sohni-ui",
-  "version": "1.0.61",
+  "version": "1.0.62",
   "description": "A React Native component library.",
   "main": "index.js",
   "types": "index.d.ts",

@@ -1,2 +1,2 @@
 export { default as Button } from './components/Button';
-export { default as Toast } from './components/toast';
+export { default as Toast, useToast, ToastProvider } from './components/toast';

@@ -1,59 +1,193 @@
 import React, {
-  useState,
-  useEffect,
-  useRef,
+  createContext,
   useCallback,
+  useContext,
+  useEffect,
   useMemo,
+  useRef,
+  useState,
 } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  Animated,
-  TouchableOpacity,
   ActivityIndicator,
-  StyleProp,
-  ViewStyle,
-  TextStyle,
+  Animated,
   Dimensions,
-  useColorScheme,
   Platform,
+  StyleProp,
+  StyleSheet,
+  Text,
+  TextStyle,
+  TouchableOpacity,
+  useColorScheme,
+  View,
+  ViewStyle,
 } from 'react-native';
+import {
+  ToastComponentProps,
+  ToastContextType,
+  ToastItem,
+  ToastProps,
+  ToastType,
+} from '@/types/props';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const TOAST_MARGIN = 16;
 const TOAST_WIDTH = SCREEN_WIDTH - TOAST_MARGIN * 2;
+const MAX_TOASTS = 3;
 
-export type ToastPosition = 'top' | 'bottom' | 'center';
-export type ToastType = 'success' | 'error' | 'info' | 'warning' | 'loading';
-export type ToastTheme = 'light' | 'dark' | 'colored' | 'system';
+const ToastContext = createContext<ToastContextType | undefined>(undefined);
 
-export interface ToastProps {
-  message?: string;
-  description?: string;
+const generateId = () => Math.random().toString(36).substring(2, 9);
 
-  type?: ToastType;
-  position?: ToastPosition;
-  theme?: ToastTheme;
-  icon?: React.ReactNode;
-  duration?: number;
+export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({
+  children,
+}) => {
+  const [toasts, setToasts] = useState<ToastItem[]>([]);
 
-  containerStyle?: StyleProp<ViewStyle>;
-  textStyle?: StyleProp<TextStyle>;
-  descriptionStyle?: StyleProp<TextStyle>;
+  const showToast = useCallback((props: Partial<ToastProps>) => {
+    const id = generateId();
+    const newToast = {
+      ...props,
+      id,
+      createdAt: Date.now(),
+    } as ToastItem;
 
-  closable?: boolean;
-  progress?: boolean;
+    setToasts((currentToasts) => {
+      const updatedToasts = [...currentToasts];
+      if (updatedToasts.length >= MAX_TOASTS) {
+        updatedToasts.sort((a, b) => a.createdAt - b.createdAt);
+        updatedToasts.shift();
+      }
+      return [...updatedToasts, newToast];
+    });
 
-  promise?: Promise<any>;
-  pendingMessage?: string;
-  successMessage?: string;
-  errorMessage?: string;
+    return id;
+  }, []);
 
-  onClose?: () => void;
+  const hideToast = useCallback((id?: string) => {
+    if (id) {
+      setToasts((currentToasts) =>
+        currentToasts.filter((toast) => toast.id !== id)
+      );
+    } else {
+      setToasts([]);
+    }
+  }, []);
+
+  const success = useCallback(
+    (message: string, options?: Partial<ToastProps>) => {
+      return showToast({
+        message,
+        type: 'success',
+        ...options,
+      });
+    },
+    [showToast]
+  );
+
+  const error = useCallback(
+    (message: string, options?: Partial<ToastProps>) => {
+      return showToast({
+        message,
+        type: 'error',
+        ...options,
+      });
+    },
+    [showToast]
+  );
+
+  const info = useCallback(
+    (message: string, options?: Partial<ToastProps>) => {
+      return showToast({
+        message,
+        type: 'info',
+        ...options,
+      });
+    },
+    [showToast]
+  );
+
+  const warning = useCallback(
+    (message: string, options?: Partial<ToastProps>) => {
+      return showToast({
+        message,
+        type: 'warning',
+        ...options,
+      });
+    },
+    [showToast]
+  );
+
+  const loading = useCallback(
+    (message: string, options?: Partial<ToastProps>) => {
+      return showToast({
+        message,
+        type: 'loading',
+        duration: 0,
+        ...options,
+      });
+    },
+    [showToast]
+  );
+
+  const promise = useCallback(
+    <T extends any>(promise: Promise<T>, options?: Partial<ToastProps>) => {
+      const id = showToast({
+        promise,
+        pendingMessage: options?.pendingMessage || 'Loading...',
+        successMessage: options?.successMessage || 'Success!',
+        errorMessage: options?.errorMessage || 'Something went wrong',
+        position: options?.position || 'bottom',
+        duration: options?.duration || 3000,
+        theme: options?.theme || 'system',
+        ...options,
+      });
+
+      return promise.finally(() => {});
+    },
+    [showToast]
+  );
+
+  const contextValue = useMemo(
+    () => ({
+      showToast,
+      hideToast,
+      success,
+      error,
+      info,
+      warning,
+      loading,
+      promise,
+    }),
+    [showToast, hideToast, success, error, info, warning, loading, promise]
+  );
+
+  return (
+    <ToastContext.Provider value={contextValue}>
+      {children}
+      {toasts.map((toast, index) => (
+        <Toast
+          key={toast.id}
+          {...toast}
+          onClose={() => hideToast(toast.id)}
+          toastIndex={index}
+          totalToasts={toasts.length}
+        />
+      ))}
+    </ToastContext.Provider>
+  );
+};
+
+export function useToast() {
+  const context = useContext(ToastContext);
+
+  if (context === undefined) {
+    throw new Error('useToast must be used within a ToastProvider');
+  }
+
+  return context;
 }
 
-const Toast: React.FC<ToastProps> = ({
+const Toast: React.FC<ToastComponentProps> = ({
   message = '',
   description,
   type = 'info',
@@ -71,6 +205,9 @@ const Toast: React.FC<ToastProps> = ({
   successMessage = 'Success!',
   errorMessage = 'Something went wrong',
   onClose,
+  toastIndex = 0,
+  totalToasts = 1,
+  radius = 100,
 }) => {
   const systemColorScheme = useColorScheme();
   const effectiveTheme = useMemo(
@@ -100,6 +237,12 @@ const Toast: React.FC<ToastProps> = ({
   const isMounted = useRef(true);
 
   useEffect(() => {
+    if (message.length > 0) {
+      showToastCallback();
+    }
+  }, []);
+
+  useEffect(() => {
     return () => {
       isMounted.current = false;
       if (timeoutRef.current) {
@@ -120,13 +263,11 @@ const Toast: React.FC<ToastProps> = ({
 
   useEffect(() => {
     if (!promise) return;
-
-    setIsVisible(true);
     setInternalType('loading');
     setInternalMessage(pendingMessage);
 
     showToastCallback(0);
-
+    if (!promise) return;
     promise
       .then((result) => {
         if (isMounted.current) {
@@ -152,7 +293,6 @@ const Toast: React.FC<ToastProps> = ({
     const progressListener = progressAnim.addListener(({ value }) => {
       setProgressWidth(value);
     });
-
     return () => {
       progressAnim.removeListener(progressListener);
     };
@@ -163,9 +303,7 @@ const Toast: React.FC<ToastProps> = ({
       if (timeoutRef.current) {
         clearTimeout(timeoutRef.current);
       }
-
       setIsVisible(true);
-
       if (position === 'top') {
         translateYAnim.setValue(-50);
       } else if (position === 'bottom') {
@@ -173,7 +311,6 @@ const Toast: React.FC<ToastProps> = ({
       } else {
         scaleAnim.setValue(0.8);
       }
-
       Animated.parallel([
         Animated.timing(fadeAnim, {
           toValue: 1,
@@ -195,7 +332,6 @@ const Toast: React.FC<ToastProps> = ({
               useNativeDriver: true,
             }),
       ]).start();
-
       if (progress && autoHideDuration > 0) {
         progressAnim.setValue(0);
         Animated.timing(progressAnim, {
@@ -204,7 +340,6 @@ const Toast: React.FC<ToastProps> = ({
           useNativeDriver: false,
         }).start();
       }
-
       if (autoHideDuration > 0) {
         timeoutRef.current = setTimeout(() => {
           hideToastCallback();
@@ -227,7 +362,6 @@ const Toast: React.FC<ToastProps> = ({
       clearTimeout(timeoutRef.current);
       timeoutRef.current = null;
     }
-
     Animated.parallel([
       Animated.timing(fadeAnim, {
         toValue: 0,
@@ -257,55 +391,61 @@ const Toast: React.FC<ToastProps> = ({
   }, [fadeAnim, translateYAnim, scaleAnim, position, onClose]);
 
   const getPositionStyle = useMemo((): StyleProp<ViewStyle> => {
+    const TOAST_SPACING = 5;
+    const TOAST_HEIGHT = description ? 90 : 60;
+    const offset = toastIndex * (TOAST_HEIGHT + TOAST_SPACING);
     switch (position) {
       case 'top':
-        return { top: 50 };
+        return { top: 50 + offset };
       case 'bottom':
-        return { bottom: 50 };
+        return { bottom: 50 + offset };
       case 'center':
-        return { top: SCREEN_HEIGHT / 2 - 50 };
+        return {
+          top:
+            SCREEN_HEIGHT / 2 -
+            50 +
+            offset -
+            ((totalToasts - 1) * (TOAST_HEIGHT + TOAST_SPACING)) / 2,
+        };
       default:
-        return { top: 50 };
+        return { top: 50 + offset };
     }
-  }, [position]);
+  }, [position, toastIndex, totalToasts, description]);
 
   const getColors = useMemo(() => {
     const colorMap = {
       success: {
-        light: { bg: '#F8F8F8', text: '#333333', icon: '#4CAF50' },
-        dark: { bg: '#333333', text: '#FFFFFF', icon: '#81C784' },
+        light: { bg: '#F8F8F8', text: '#181818', icon: '#4CAF50' },
+        dark: { bg: '#181818', text: '#FFFFFF', icon: '#81C784' },
         colored: { bg: '#4CAF50', text: '#FFFFFF', icon: '#FFFFFF' },
       },
       error: {
-        light: { bg: '#F8F8F8', text: '#333333', icon: '#F44336' },
-        dark: { bg: '#333333', text: '#FFFFFF', icon: '#E57373' },
+        light: { bg: '#F8F8F8', text: '#181818', icon: '#F44336' },
+        dark: { bg: '#181818', text: '#FFFFFF', icon: '#E57373' },
         colored: { bg: '#F44336', text: '#FFFFFF', icon: '#FFFFFF' },
       },
       info: {
-        light: { bg: '#F8F8F8', text: '#333333', icon: '#03A9F4' },
-        dark: { bg: '#333333', text: '#FFFFFF', icon: '#4FC3F7' },
+        light: { bg: '#F8F8F8', text: '#181818', icon: '#03A9F4' },
+        dark: { bg: '#181818', text: '#FFFFFF', icon: '#4FC3F7' },
         colored: { bg: '#03A9F4', text: '#FFFFFF', icon: '#FFFFFF' },
       },
       warning: {
-        light: { bg: '#F8F8F8', text: '#333333', icon: '#FF9800' },
-        dark: { bg: '#333333', text: '#FFFFFF', icon: '#FFB74D' },
+        light: { bg: '#F8F8F8', text: '#181818', icon: '#FF9800' },
+        dark: { bg: '#181818', text: '#FFFFFF', icon: '#FFB74D' },
         colored: { bg: '#FF9800', text: '#FFFFFF', icon: '#FFFFFF' },
       },
       loading: {
-        light: { bg: '#F8F8F8', text: '#333333', icon: '#3F51B5' },
-        dark: { bg: '#333333', text: '#FFFFFF', icon: '#7986CB' },
+        light: { bg: '#F8F8F8', text: '#181818', icon: '#3F51B5' },
+        dark: { bg: '#181818', text: '#FFFFFF', icon: '#7986CB' },
         colored: { bg: '#3F51B5', text: '#FFFFFF', icon: '#FFFFFF' },
       },
     };
-
     return colorMap[internalType][effectiveTheme];
   }, [internalType, effectiveTheme]);
 
   const renderIcon = useCallback(() => {
     if (icon) return icon;
-
     const colors = getColors;
-
     switch (internalType) {
       case 'loading':
         return <ActivityIndicator size="small" color={colors.icon} />;
@@ -315,7 +455,7 @@ const Toast: React.FC<ToastProps> = ({
             <Text
               style={{ fontSize: 14, color: colors.icon, fontWeight: '700' }}
             >
-              ✓
+              ✅
             </Text>
           </View>
         );
@@ -325,7 +465,7 @@ const Toast: React.FC<ToastProps> = ({
             <Text
               style={{ fontSize: 14, color: colors.icon, fontWeight: '700' }}
             >
-              ✕
+              ❌
             </Text>
           </View>
         );
@@ -335,7 +475,7 @@ const Toast: React.FC<ToastProps> = ({
             <Text
               style={{ fontSize: 14, color: colors.icon, fontWeight: '700' }}
             >
-              !
+              ⚠️
             </Text>
           </View>
         );
@@ -345,7 +485,7 @@ const Toast: React.FC<ToastProps> = ({
             <Text
               style={{ fontSize: 14, color: colors.icon, fontWeight: '700' }}
             >
-              i
+              ℹ️
             </Text>
           </View>
         );
@@ -384,6 +524,9 @@ const Toast: React.FC<ToastProps> = ({
           backgroundColor: colors.bg,
         },
         containerStyle,
+        {
+          borderRadius: radius,
+        },
       ]}
     >
       {/* Progress bar */}
@@ -397,11 +540,9 @@ const Toast: React.FC<ToastProps> = ({
           />
         </View>
       )}
-
       <View style={styles.contentContainer}>
         {/* Icon */}
         <View style={styles.iconContainer}>{renderIcon()}</View>
-
         {/* Text content */}
         <View style={styles.textContainer}>
           <Text style={[styles.message, { color: colors.text }, textStyle]}>
@@ -419,7 +560,6 @@ const Toast: React.FC<ToastProps> = ({
             </Text>
           )}
         </View>
-
         {/* Close button */}
         {closable && (
           <TouchableOpacity
@@ -437,10 +577,10 @@ const Toast: React.FC<ToastProps> = ({
 const styles = StyleSheet.create({
   container: {
     position: 'absolute',
-    zIndex: 9999,
+    zIndex: 1000000,
     width: TOAST_WIDTH,
     marginHorizontal: TOAST_MARGIN,
-    borderRadius: 12,
+    borderRadius: 100,
     overflow: 'hidden',
     ...Platform.select({
       ios: {
@@ -450,7 +590,7 @@ const styles = StyleSheet.create({
         shadowRadius: 8,
       },
       android: {
-        elevation: 6,
+        shadowRadius: 8,
       },
     }),
   },
@@ -470,7 +610,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   iconContainer: {
-    marginRight: 12,
+    marginRight: 4,
     height: 26,
     width: 26,
     justifyContent: 'center',
@@ -507,49 +647,5 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.05)',
   },
 });
-
-export function useToast() {
-  const [toastProps, setToastProps] = useState<Partial<ToastProps>>({});
-
-  const showToast = useCallback((props: Partial<ToastProps>) => {
-    setToastProps(props);
-  }, []);
-
-  const hideToast = useCallback(() => {
-    setToastProps({});
-  }, []);
-
-  const handlePromise = useCallback(
-    <T extends any>(promise: Promise<T>, options?: Partial<ToastProps>) => {
-      setToastProps({
-        promise,
-        pendingMessage: options?.pendingMessage || 'Loading...',
-        successMessage: options?.successMessage || 'Success!',
-        errorMessage: options?.errorMessage || 'Something went wrong',
-        position: options?.position || 'bottom',
-        duration: options?.duration || 3000,
-        theme: options?.theme || 'system',
-      });
-
-      return promise;
-    },
-    []
-  );
-
-  const ToastComponent = useCallback(
-    () =>
-      Object.keys(toastProps).length > 0 ? (
-        <Toast {...(toastProps as ToastProps)} />
-      ) : null,
-    [toastProps]
-  );
-
-  return {
-    showToast,
-    hideToast,
-    handlePromise,
-    ToastComponent,
-  };
-}
 
 export default Toast;

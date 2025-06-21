@@ -1,4 +1,9 @@
-import { StyleProp, TextStyle, ViewStyle } from 'react-native';
+import {
+  AccessibilityProps,
+  StyleProp,
+  TextStyle,
+  ViewStyle,
+} from 'react-native';
 
 export type ToastPosition = 'top' | 'bottom' | 'center';
 export type ToastType = 'success' | 'error' | 'info' | 'warning' | 'loading';
@@ -52,4 +57,19 @@ export interface ToastContextType {
 export interface ToastComponentProps extends ToastProps {
   toastIndex?: number;
   totalToasts?: number;
+}
+
+export interface SwitchProps extends AccessibilityProps {
+  value: boolean;
+  onValueChange: (value: boolean) => void;
+  disabled?: boolean;
+  activeColor?: string;
+  inactiveColor?: string;
+  thumbColor?: string;
+  thumbInactiveColor?: string;
+  width?: number;
+  height?: number;
+  thumbSize?: number;
+  style?: ViewStyle;
+  testID?: string;
 }
